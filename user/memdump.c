@@ -52,14 +52,58 @@ main(int argc, char *argv[])
     memdump(argv[1], data);
   } else {
     printf("Usage: memdump [format]\n");
-    exit(1);
-  }
+    exit(1);  }
   exit(0);
 }
 
-void
+  void
 memdump(char *fmt, char *data)
 {
-  // Your code here.
-
+  while(*fmt){
+    switch(*fmt){
+    case 'i': { // 4-byte integer, decimal
+      int val = *(int*)data;
+      printf("%d\n", val);
+      data += 4;
+      break;
+    }
+    case 'p': { // 8-byte integer, hex
+      uint64 val = *(uint64*)data;
+      printf("%p\n", (void*)val);
+      data += 8;
+      break;
+    }
+    case 'h': { // 2-byte integer, decimal
+      short val = *(short*)data;
+      printf("%d\n", val);
+      data += 2;
+      break;
+    }
+    case 'c': { // 1-byte ASCII char
+      char val = *data;
+      printf("%c\n", val);
+      data += 1;
+      break;
+    }
+    case 's': { // 8-byte pointer to C string
+      char *s = *(char**)data;
+      printf("%s\n", s);
+      data += 8;
+      break;
+    }
+    case 'S': { // inline null-terminated C string
+      char *s = (char*)data;
+      printf("%s\n", s);
+      data += strlen(s) + 1; // advance past string
+      break;
+    }
+    default:
+      printf("Unknown format %c\n", *fmt);
+      break;
+    }
+    fmt++;
+  }
 }
+
+
+
