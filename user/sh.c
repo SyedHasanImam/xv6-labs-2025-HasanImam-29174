@@ -1,4 +1,7 @@
 // Shell.
+#define MAX_HISTORY 50
+char *history[MAX_HISTORY];
+int history_count = 0;
 
 #include "kernel/types.h"
 #include "user/user.h"
@@ -6,6 +9,15 @@
 #include "kernel/fs.h"   // add this if it isn’t already there
 #include "user.h"     // declares putc(), printf(), etc.
 #include "string.h"   // declares strncmp(), strcpy(), strlen(), etc.
+char* strdup(const char *s) {
+    int len = 0;
+    while(s[len]) len++;         // find length
+    char *p = malloc(len + 1);   // allocate memory
+    if(!p) return 0;
+    for(int i = 0; i <= len; i++) // copy including null terminator
+        p[i] = s[i];
+    return p;
+}
 
 void
 putc(int fd, char c)
@@ -152,6 +164,15 @@ runcmd(struct cmd *cmd)
         break;  // don’t exec
     }
 
+    // built-in history
+    if(strcmp(ecmd->argv[0], "history") == 0){
+        extern char *history[];
+        extern int history_count;
+        for(int i = 0; i < history_count; i++)
+            printf("%d %s\n", i+1, history[i]);
+        break;  // don’t exec
+    }
+
     exec(ecmd->argv[0], ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
@@ -275,6 +296,19 @@ main(void)
       cmd++;
     if (*cmd == '\n') // is a blank command
       continue;
+
+if (*cmd != '\n') {
+        if(history_count < MAX_HISTORY){
+            history[history_count] = strdup(cmd);
+            history_count++;
+        } else {
+            free(history[0]);
+            for(int i = 1; i < MAX_HISTORY; i++)
+                history[i-1] = history[i];
+            history[MAX_HISTORY-1] = strdup(cmd);
+        }
+    }
+
     if(cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' '){
       // Chdir must be called by the parent, not the child.
       cmd[strlen(cmd)-1] = 0;  // chop \n
