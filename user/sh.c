@@ -142,10 +142,21 @@ runcmd(struct cmd *cmd)
   case EXEC:
     ecmd = (struct execcmd*)cmd;
     if(ecmd->argv[0] == 0)
-      exit(1);
+        exit(1);
+
+    // built-in wait
+    if(strcmp(ecmd->argv[0], "wait") == 0){
+        int pid;
+        while((pid = wait(0)) > 0)
+            ;   // wait for all child processes
+        break;  // don’t exec
+    }
+
     exec(ecmd->argv[0], ecmd->argv);
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
+
+
 
   case REDIR:
     rcmd = (struct redircmd*)cmd;
