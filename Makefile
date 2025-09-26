@@ -200,8 +200,7 @@ UPROGS=\
 	$U/_forphan\
 	$U/_dorphan\
 
-
-
+EXTRA= test.sh
 
 ifeq ($(LAB),syscall)
 UPROGS += \
