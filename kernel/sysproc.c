@@ -105,3 +105,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_interpose(void)
+{
+  int mask;
+  argint(0, &mask);     // no return value on RISC-V
+  myproc()->sys_mask = (uint)mask;
+  return 0;
+}
+

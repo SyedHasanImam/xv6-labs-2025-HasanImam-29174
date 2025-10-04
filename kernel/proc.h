@@ -23,7 +23,8 @@ struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
   struct context context;     // swtch() here to enter scheduler().
   int noff;                   // Depth of push_off() nesting.
-  int intena;                 // Were interrupts enabled before push_off()?
+  int intena;
+                 // Were interrupts enabled before push_off()?
 };
 
 extern struct cpu cpus[NCPU];
@@ -89,6 +90,7 @@ struct proc {
   enum procstate state;        // Process state
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
+  uint sys_mask;  // sandbox syscall mask
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
 
@@ -104,4 +106,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+      
 };
