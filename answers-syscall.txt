@@ -1,0 +1,21 @@
+1) Which function called syscall?
+usertrap
+
+2) What is the value of p->trapframe->a7, and what does it represent?
+p->trapframe->a7 = 0xf (15)
+It represents the system call number — SYS_open.
+
+3) What was the previous CPU mode?
+$sstatus = 0x200000020 → previous mode = user mode, current mode = supervisor mode.
+
+4) At which assembly instruction does the kernel panic occur, and which register corresponds to num?
+At 0x80001cee <syscall+16>: lw a3,0(zero)
+The register a3 corresponds to num.
+
+5) Why does the kernel crash?
+It tries to dereference address 0x0 (null pointer), causing a page fault (scause=0xd).
+
+6) What was the process name and PID when the kernel panicked?
+Process name: init
+PID: 1
+
