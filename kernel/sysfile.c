@@ -3,7 +3,7 @@
 // Mostly argument checking, since we don't trust
 // user code, and calls into file.c and fs.c.
 //
-
+#include "syscall.h"
 #include "types.h"
 #include "riscv.h"
 #include "defs.h"
@@ -309,10 +309,18 @@ sys_open(void)
   struct file *f;
   struct inode *ip;
   int n;
+  struct proc *p = myproc();
 
-  argint(1, &omode);
   if((n = argstr(0, path, MAXPATH)) < 0)
-    return -1;
+   { return -1;}
+  if(argint(1, &omode) < 0)
+  {  return -1;
+}
+  // === Sandbox pathname check ===
+if ((p->mask & (1 << SYS_open)) && strncmp(path, p->allowed_path, MAXPATH) != 0) {
+  return -1;
+}
+ // ==============================
 
   begin_op();
 
@@ -442,6 +450,13 @@ sys_exec(void)
   if(argstr(0, path, MAXPATH) < 0) {
     return -1;
   }
+struct proc *p = myproc();
+if ((p->mask & (1 << SYS_exec)) && strncmp(path, p->allowed_path, MAXPATH) != 0) {
+    return -1;
+}
+// ==============================
+  // ==============================
+
   memset(argv, 0, sizeof(argv));
   for(i=0;; i++){
     if(i >= NELEM(argv)){

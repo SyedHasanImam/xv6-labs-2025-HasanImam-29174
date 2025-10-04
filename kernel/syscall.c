@@ -53,10 +53,11 @@ argraw(int n)
 }
 
 // Fetch the nth 32-bit system call argument.
-void
+int
 argint(int n, int *ip)
 {
   *ip = argraw(n);
+return 0;
 }
 
 // Retrieve an argument as a pointer.
@@ -135,24 +136,35 @@ syscall(void)
 {
   int num;
   struct proc *p = myproc();
+  struct trapframe *tf = p->trapframe;
 
-  num = p->trapframe->a7;  // syscall number
+  num = tf->a7;
 
-  // Validate syscall number first
-  if (num <= 0 || num >= NELEM(syscalls) || syscalls[num] == 0) {
+  if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+    // Check sandbox restrictions
+    if (p->sys_mask & (1 << num)) {
+      // Special case for open (SYS_open) and exec (SYS_exec)
+      if (num == SYS_open || num == SYS_exec) {
+        char path[MAXPATH];
+        // first syscall argument is a string
+        if (argstr(0, path, MAXPATH) >= 0 &&
+            strncmp(path, p->allowed_path, MAXPATH) == 0) {
+          // allowed
+          tf->a0 = syscalls[num]();
+          return;
+        }
+      }
+      // blocked
+      printf("%d %s: syscall %d blocked by sandbox\n", p->pid, p->name, num);
+      tf->a0 = -1;
+      return;
+    }
+
+    // normal case
+    tf->a0 = syscalls[num]();
+  } else {
     printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
-    p->trapframe->a0 = -1;
-    return;
+    tf->a0 = -1;
   }
-
-  // Sandbox check: block if masked
-  if (p->sys_mask & (1U << num)) {
-    printf("%d %s: syscall %d blocked by sandbox\n", p->pid, p->name, num);
-    p->trapframe->a0 = -1;
-    return;
-  }
-
-  // Normal syscall execution
-  p->trapframe->a0 = syscalls[num]();
 }
 

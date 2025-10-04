@@ -5,32 +5,25 @@
 int
 main(int argc, char *argv[])
 {
-  if (argc < 3) {
-    fprintf(2, "Usage: sandbox mask [-] command [args...]\n");
+  if (argc < 4) {
+    fprintf(2, "Usage: sandbox mask allowed_path command [args...]\n");
     exit(1);
   }
 
   int mask = atoi(argv[1]);
+  char *allowed_path = argv[2];
 
-  // If the second arg is "-" skip it
-  int cmd_index = 2;
-  if (strcmp(argv[2], "-") == 0) {
-    if (argc < 4) {
-      fprintf(2, "Usage: sandbox mask [-] command [args...]\n");
-      exit(1);
-    }
-    cmd_index = 3;
-  }
-
-  if (interpose(mask) < 0) {
+  // call sys_interpose
+  if (interpose(mask, allowed_path) < 0) {
     fprintf(2, "sandbox: interpose failed\n");
     exit(1);
   }
 
-  exec(argv[cmd_index], &argv[cmd_index]);
+  // command starts at argv[3]
+  exec(argv[3], &argv[3]);
 
   // exec failed
-  fprintf(2, "sandbox: exec %s failed\n", argv[cmd_index]);
+  fprintf(2, "sandbox: exec %s failed\n", argv[3]);
   exit(1);
 }
 

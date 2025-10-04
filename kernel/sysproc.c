@@ -109,9 +109,18 @@ sys_uptime(void)
 uint64
 sys_interpose(void)
 {
-  int mask;
-  argint(0, &mask);     // no return value on RISC-V
-  myproc()->sys_mask = (uint)mask;
-  return 0;
+    int mask;
+    char path[MAXPATH];
+    struct proc *p = myproc();
+
+    if (argint(0, &mask) < 0)
+        return -1;
+    if (argstr(1, path, MAXPATH) < 0)
+        return -1;
+
+    p->mask = mask;
+    safestrcpy(p->allowed_path, path, MAXPATH);  // store allowed pathname
+
+    return 0;
 }
 
