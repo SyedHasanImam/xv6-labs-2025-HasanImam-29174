@@ -1,0 +1,57 @@
+Lab: Page Tables — Inspect a user-process page table (easy)
+
+Output of pgtbltest:
+
+va 0x0 pte 0x21FC885B pa 0x87F22000 perm 0x5B
+va 0x1000 pte 0x21FC7C5B pa 0x87F1F000 perm 0x5B
+va 0x2000 pte 0x21FC7817 pa 0x87F1E000 perm 0x17
+va 0x3000 pte 0x21FC7407 pa 0x87F1D000 perm 0x7
+va 0x4000 pte 0x21FC70D7 pa 0x87F1C000 perm 0xD7
+va 0x5000 pte 0x0 pa 0x0 perm 0x0
+va 0x6000 pte 0x0 pa 0x0 perm 0x0
+va 0x7000 pte 0x0 pa 0x0 perm 0x0
+va 0x8000 pte 0x0 pa 0x0 perm 0x0
+va 0x9000 pte 0x0 pa 0x0 perm 0x0
+va 0x3FFFFFE000 pte 0x21FD08C7 pa 0x87F42000 perm 0xC7
+va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
+
+---
+
+Each line shows a mapping between a virtual address and a physical address for the pgtbltest process.  
+The “perm” value represents the permission bits for that mapping.
+
+The permission bits on RISC-V are:
+V (valid), R (read), W (write), X (execute), U (user), A (accessed), and D (dirty).
+
+Now decoding my output:
+
+- `va 0x0` → perm 0x5B → bits for valid, read, execute, user, accessed, dirty  
+  This is most likely a code/text page since it’s readable and executable but not writable.
+
+- `va 0x1000` → perm 0x5B → same as above, another code page.
+
+- `va 0x2000` → perm 0x17 → valid, read, write, user  
+  This one seems like a data page (read + write, no execute).
+
+- `va 0x3000` → perm 0x07 → valid, read, write (probably kernel-only, not user).
+
+- `va 0x4000` → perm 0xD7 → valid, read, write, execute, user, accessed, dirty  
+  This one has all permissions — maybe part of stack or heap setup.
+
+- Pages from `0x5000` to `0x9000` are unmapped (pte=0), meaning there’s no physical mapping for those addresses.
+
+- `va 0x3FFFFFE000` → perm 0xC7 → valid, read, write, execute, user, accessed, dirty  
+  This is at the top of the user space, so this is probably the user stack.
+
+- `va 0x3FFFFFF000` → perm 0x4B → valid, read, write, user, accessed, dirty (no execute)  
+  This is likely the trampoline or trapframe, used for traps and syscalls.
+
+---
+
+In short:
+- The lower virtual addresses (0x0 onwards) are code and data pages.
+- The higher ones near 0x3FFFFFE000 are the user stack and trampoline.
+- Unmapped pages have pte=0 and are just empty gaps in the address space.
+
+So the output matches the expected layout from the xv6 book:  
+low memory for program text/data and high memory for stack/trampoline.
