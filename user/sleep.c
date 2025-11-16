@@ -6,15 +6,12 @@ int
 main(int argc, char *argv[])
 {
   if (argc < 2) {
-    printf("usage: sleep ticks\n");
+    fprintf(2, "usage: sleep ticks\n");
     exit(1);
   }
 
   int ticks = atoi(argv[1]);
-  int start = uptime();
-
-  while (uptime() - start < ticks)
-    pause(1);
+  pause(ticks);
 
   exit(0);
 }

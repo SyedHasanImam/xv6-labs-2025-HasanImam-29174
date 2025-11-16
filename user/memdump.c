@@ -67,9 +67,9 @@ memdump(char *fmt, char *data)
       data += 4;
       break;
     }
-    case 'p': { // 8-byte integer, hex
+    case 'p': { // 8-byte integer, hex (print lower 32 bits only)
       uint64 val = *(uint64*)data;
-      printf("%p\n", (void*)val);
+      printf("%x\n", (uint)(val & 0xFFFFFFFF));
       data += 8;
       break;
     }
