@@ -146,6 +146,10 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // Initialize interpose fields
+  p->interpose_mask = 0;
+  p->interpose_path[0] = '\0';
+
   return p;
 }
 
@@ -286,6 +290,10 @@ kfork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+
+  // Copy interpose mask and path from parent to child
+  np->interpose_mask = p->interpose_mask;
+  safestrcpy(np->interpose_path, p->interpose_path, sizeof(np->interpose_path));
 
   pid = np->pid;
 

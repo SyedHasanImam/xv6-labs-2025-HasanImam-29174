@@ -202,7 +202,8 @@ UPROGS=\
 ifeq ($(LAB),syscall)
 UPROGS += \
 	$U/_attack\
-	$U/_secret
+	$U/_secret\
+	$U/_sandbox
 endif
 
 ifeq ($(LAB),lock)
@@ -276,6 +277,10 @@ ifeq ($(LAB),util)
 	UEXTRA += user/findtest.sh
 	UEXTRA += user/sixfive.txt
 	UPROGS += $U/_memdump
+endif
+
+ifeq ($(LAB),syscall)
+	UEXTRA += user/exec.sh
 endif
 
 

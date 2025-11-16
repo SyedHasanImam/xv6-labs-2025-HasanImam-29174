@@ -105,3 +105,26 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_interpose(void)
+{
+  int mask;
+  char path[128];
+  struct proc *p = myproc();
+
+  argint(0, &mask);
+  if(argstr(1, path, 128) < 0)
+    return -1;
+
+  p->interpose_mask = mask;
+  
+  // Copy the path, handling "-" as empty/no path
+  if(path[0] == '-' && path[1] == '\0'){
+    p->interpose_path[0] = '\0';
+  } else {
+    safestrcpy(p->interpose_path, path, sizeof(p->interpose_path));
+  }
+
+  return 0;
+}

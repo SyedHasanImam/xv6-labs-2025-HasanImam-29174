@@ -1,0 +1,22 @@
+1. Looking at the backtrace output, which function called syscall?
+   usertrap() called syscall.
+
+2. What is the value of p->trapframe->a7 and what does that value represent?
+   The value is 7, which represents SYS_exec. The a7 register holds the system call number
+   that the user program wants to execute. In init.c, the exec system call is invoked.
+
+3. What was the previous mode that the CPU was in?
+   The CPU was in user mode (U-mode). This can be determined from the SPP bit in the sstatus
+   register, which indicates the privilege level before the trap occurred.
+
+4. Write down the assembly instruction the kernel is panicing at. Which register corresponds to the variable num?
+   The instruction is: lw a3, 0(a0)
+   The register a3 corresponds to the variable num.
+
+5. Why does the kernel crash?
+   The kernel crashes because address 0 is not mapped in the kernel address space. The value
+   of scause 0xd indicates a load page fault. When we try to dereference a null pointer (0),
+   the MMU cannot find a valid mapping for that address, causing a page fault exception.
+
+6. What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
+   The process name is "initcode" or "init" (depending on timing), and its pid is 1.
