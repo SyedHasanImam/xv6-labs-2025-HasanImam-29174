@@ -81,8 +81,8 @@ kvminithart()
 }
 
 // Return the address of the PTE in page table pagetable
-// that corresponds to virtual address va.  If alloc!=0,
-// create any required page-table pages.
+// that corresponds to virtual address va at specified level.
+// If alloc!=0, create any required page-table pages.
 //
 // The risc-v Sv39 scheme has three levels of page-table
 // pages. A page-table page contains 512 64-bit PTEs.
@@ -117,6 +117,30 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   return &pagetable[PX(0, va)];
 }
 
+#ifdef LAB_PGTBL
+// Get the level-1 PTE for creating superpages
+pte_t *
+walk_level1(pagetable_t pagetable, uint64 va, int alloc)
+{
+  if(va >= MAXVA)
+    panic("walk_level1");
+
+  // Level 2
+  pte_t *pte = &pagetable[PX(2, va)];
+  if(*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+  } else {
+    if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+      return 0;
+    memset(pagetable, 0, PGSIZE);
+    *pte = PA2PTE(pagetable) | PTE_V;
+  }
+
+  // Level 1 - return this
+  return &pagetable[PX(1, va)];
+}
+#endif
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
@@ -142,9 +166,55 @@ walkaddr(pagetable_t pagetable, uint64 va)
 
 
 #if defined(LAB_PGTBL) || defined(SOL_MMAP) || defined(SOL_COW)
+// Print a 64-bit hex number with leading zeros (16 hex digits)
+static void
+print_hex64(uint64 x) {
+  int i;
+  for (i = 60; i >= 0; i -= 4) {
+    int digit = (x >> i) & 0xf;
+    consputc("0123456789abcdef"[digit]);
+  }
+}
+
+// Helper function to recursively print page table entries
+// va_base: the virtual address base for this level
+// level: 1 for L2 (top), 2 for L1 (middle), 3 for L0 (bottom/leaf)
+static void
+vmprint_helper(pagetable_t pagetable, uint64 va_base, int level) {
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      // Calculate the virtual address for this PTE
+      uint64 va = va_base + ((uint64)i << PXSHIFT(3 - level));
+      
+      // Print the indentation based on level
+      for(int j = 0; j < level; j++){
+        printf(" ..");
+      }
+      
+      uint64 pa = PTE2PA(pte);
+      printf("0x");
+      print_hex64(va);
+      printf(": pte 0x");
+      print_hex64(pte);
+      printf(" pa 0x");
+      print_hex64(pa);
+      printf("\n");
+      
+      // Recurse if this is not a leaf (and not level 3)
+      if(level < 3 && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        uint64 child = PTE2PA(pte);
+        vmprint_helper((pagetable_t)child, va, level + 1);
+      }
+    }
+  }
+}
+
 void
 vmprint(pagetable_t pagetable) {
-  // your code here
+  printf("page table %p\n", pagetable);
+  vmprint_helper(pagetable, 0, 1);
 }
 #endif
 
@@ -223,6 +293,64 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += sz){
+    sz = PGSIZE;
+#ifdef LAB_PGTBL
+    // Check for complete superpage unmapping (2MB-aligned, full superpage)
+    if((a % SUPERPGSIZE) == 0 && a + SUPERPGSIZE <= va + npages*PGSIZE) {
+      pte_t *pte1 = walk_level1(pagetable, a, 0);
+      if(pte1 && (*pte1 & PTE_V) && PTE_LEAF(*pte1)) {
+        // This is a full superpage - unmap it
+        uint64 pa = PTE2PA(*pte1);
+        if(do_free && is_superpage((void*)pa)){
+          superfree((void*)pa);
+        }
+        *pte1 = 0;
+        sz = SUPERPGSIZE;
+        continue;
+      }
+    }
+    
+    // Check if we need to demote a superpage (partial unmapping)
+    uint64 super_start = (a / SUPERPGSIZE) * SUPERPGSIZE;
+    // Only check for demotion if we're at the first page of the unmap range within a superpage
+    if(a == va || (a > va && (a % SUPERPGSIZE) == 0)) {
+      pte_t *pte1 = walk_level1(pagetable, super_start, 0);
+      if(pte1 && (*pte1 & PTE_V) && PTE_LEAF(*pte1)) {
+        // This is a superpage that needs demotion
+        uint64 pa = PTE2PA(*pte1);
+        uint flags = PTE_FLAGS(*pte1);
+        
+        // Allocate 512 regular pages and copy data
+        char *pages[512];
+        int i;
+        for(i = 0; i < 512; i++) {
+          pages[i] = kalloc();
+          if(pages[i] == 0) {
+            // Out of memory
+            for(int j = 0; j < i; j++)
+              kfree(pages[j]);
+            panic("uvmunmap: out of memory during demotion");
+          }
+          memmove(pages[i], (char*)(pa + i * PGSIZE), PGSIZE);
+        }
+        
+        // Unmap the superpage
+        *pte1 = 0;
+        
+        // Map regular pages
+        for(i = 0; i < 512; i++) {
+          if(mappages(pagetable, super_start + i * PGSIZE, PGSIZE, (uint64)pages[i], flags) != 0) {
+            panic("uvmunmap: mappages failed during demotion");
+          }
+        }
+        
+        // Free the superpage
+        if(is_superpage((void*)pa)){
+          superfree((void*)pa);
+        }
+      }
+    }
+#endif
     if((pte = walk(pagetable, a, 0)) == 0) // leaf page table entry allocated?
       continue;
     if((*pte & PTE_V) == 0)  // has physical page been allocated?
@@ -254,6 +382,28 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
   oldsz = PGROUNDUP(oldsz);
   for(a = oldsz; a < newsz; a += sz){
     sz = PGSIZE;
+#ifdef LAB_PGTBL
+    // Try to use superpages for 2MB-aligned regions
+    if((a % SUPERPGSIZE) == 0 && a + SUPERPGSIZE <= newsz) {
+      mem = superalloc();
+      if(mem != 0) {
+        sz = SUPERPGSIZE;
+#ifndef LAB_SYSCALL
+        memset(mem, 0, sz);
+#endif
+        // Map superpage at level 1 (not level 0)
+        pte_t *pte1 = walk_level1(pagetable, a, 1);
+        if(pte1 == 0){
+          superfree(mem);
+          uvmdealloc(pagetable, a, oldsz);
+          return 0;
+        }
+        // Superpage PTE must have PTE_R (and PTE_W for writable pages)
+        *pte1 = PA2PTE(mem) | PTE_V | PTE_R | PTE_W | PTE_U | xperm;
+        continue;
+      }
+    }
+#endif
     mem = kalloc();
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
@@ -336,6 +486,31 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   int szinc = PGSIZE;
 
   for(i = 0; i < sz; i += szinc){
+    szinc = PGSIZE;
+#ifdef LAB_PGTBL
+    // Check for superpage at level 1
+    if((i % SUPERPGSIZE) == 0 && i + SUPERPGSIZE <= sz) {
+      pte_t *pte1 = walk_level1(old, i, 0);
+      if(pte1 && (*pte1 & PTE_V) && PTE_LEAF(*pte1)) {
+        // This is a leaf at level 1 (superpage)
+        pa = PTE2PA(*pte1);
+        flags = PTE_FLAGS(*pte1);
+        if(is_superpage((void*)pa)) {
+          if((mem = superalloc()) == 0)
+            goto err;
+          memmove(mem, (char*)pa, SUPERPGSIZE);
+          pte_t *new_pte1 = walk_level1(new, i, 1);
+          if(new_pte1 == 0){
+            superfree(mem);
+            goto err;
+          }
+          *new_pte1 = PA2PTE(mem) | flags;
+          szinc = SUPERPGSIZE;
+          continue;
+        }
+      }
+    }
+#endif
     if((pte = walk(old, i, 0)) == 0)
       continue;
     if((*pte & PTE_V) == 0) {
