@@ -82,15 +82,30 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2) {
-    p->alarm_ticks++;
-    if(p->alarm_interval > 0 && p->alarm_ticks >= p->alarm_interval) {
-      p->trapframe_backup = *p->trapframe;
-      p->trapframe->epc = (uint64)p->alarm_handler;
-      p->alarm_ticks = 0;
+    // --- LAB ALARM LOGIC START ---
+    if(p->alarm_interval > 0) {
+      p->alarm_ticks++;
+      
+      // Check if interval passed AND handler is NOT currently running
+      if(p->alarm_ticks >= p->alarm_interval && p->handler_in_progress == 0) {
+        
+        p->alarm_ticks = 0;
+        p->handler_in_progress = 1; // Mark handler as running
+
+        // Backup the registers (trapframe)
+        // Assumes p->alarm_tf is a pointer you allocated in allocproc
+        *p->alarm_tf = *p->trapframe;
+
+        // Redirect execution to the handler
+        p->trapframe->epc = (uint64)p->alarm_handler;
+      }
     }
+    // --- LAB ALARM LOGIC END ---
+    
     yield();
   }
 
+  // Your custom return sequence
   prepare_return();
 
   // the user page table to switch to, for trampoline.S

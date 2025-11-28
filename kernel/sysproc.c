@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "vm.h"
 
+
 uint64
 sys_exit(void)
 {
@@ -107,19 +108,22 @@ sys_uptime(void)
   return xticks;
 }
 
+
 uint64
 sys_sigalarm(void)
 {
-  int ticks;
-  uint64 handler;
+  int interval;
+  uint64 handler; // Use uint64 to store the address
   struct proc *p = myproc();
 
-  argint(0, &ticks);
-  argaddr(1, &handler);
+  // Read the integer (interval) and the address (handler)
+  if(argint(0, &interval) < 0 || argaddr(1, &handler) < 0)
+    return -1;
 
-  p->alarm_interval = ticks;
-  p->alarm_handler = (void (*)())handler;
+  p->alarm_interval = interval;
+  p->alarm_handler = (void(*)())handler;
   p->alarm_ticks = 0;
+  p->handler_in_progress = 0;
 
   return 0;
 }
@@ -128,40 +132,15 @@ uint64
 sys_sigreturn(void)
 {
   struct proc *p = myproc();
-  p->trapframe->epc = p->trapframe_backup.epc;
-  p->trapframe->sp = p->trapframe_backup.sp;
-  p->trapframe->ra = p->trapframe_backup.ra;
-  p->trapframe->gp = p->trapframe_backup.gp;
-  p->trapframe->tp = p->trapframe_backup.tp;
-  p->trapframe->t0 = p->trapframe_backup.t0;
-  p->trapframe->t1 = p->trapframe_backup.t1;
-  p->trapframe->t2 = p->trapframe_backup.t2;
-  p->trapframe->s0 = p->trapframe_backup.s0;
-  p->trapframe->s1 = p->trapframe_backup.s1;
-  p->trapframe->a0 = p->trapframe_backup.a0;
-  p->trapframe->a1 = p->trapframe_backup.a1;
-  p->trapframe->a2 = p->trapframe_backup.a2;
-  p->trapframe->a3 = p->trapframe_backup.a3;
-  p->trapframe->a4 = p->trapframe_backup.a4;
-  p->trapframe->a5 = p->trapframe_backup.a5;
-  p->trapframe->a6 = p->trapframe_backup.a6;
-  p->trapframe->a7 = p->trapframe_backup.a7;
-  p->trapframe->s2 = p->trapframe_backup.s2;
-  p->trapframe->s3 = p->trapframe_backup.s3;
-  p->trapframe->s4 = p->trapframe_backup.s4;
-  p->trapframe->s5 = p->trapframe_backup.s5;
-  p->trapframe->s6 = p->trapframe_backup.s6;
-  p->trapframe->s7 = p->trapframe_backup.s7;
-  p->trapframe->s8 = p->trapframe_backup.s8;
-  p->trapframe->s9 = p->trapframe_backup.s9;
-  p->trapframe->s10 = p->trapframe_backup.s10;
-  p->trapframe->s11 = p->trapframe_backup.s11;
-  p->trapframe->t3 = p->trapframe_backup.t3;
-  p->trapframe->t4 = p->trapframe_backup.t4;
-  p->trapframe->t5 = p->trapframe_backup.t5;
-  p->trapframe->t6 = p->trapframe_backup.t6;
   
-  p->alarm_ticks = 0; // Re-arm alarm
-
+  if(p->handler_in_progress) {
+    // Restore the registers by copying the struct pointed to by alarm_tf
+    // into the struct pointed to by trapframe.
+    *p->trapframe = *p->alarm_tf;
+    
+    p->handler_in_progress = 0;
+  }
+  
+  // Return the value that was in a0 when the alarm fired
   return p->trapframe->a0;
 }
